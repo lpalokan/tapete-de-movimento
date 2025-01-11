@@ -1,0 +1,439 @@
+<!DOCTYPE html>
+<html lang="fi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Tapete de Movimento</title>
+  <style>
+    /* Reset and full-screen styles */
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    html, body {
+      width: 100%;
+      height: 100%;
+      background: black;
+      overflow: hidden;
+      font-family: sans-serif;
+      color: white;
+    }
+    /* Grid container for the four segments */
+    #container {
+      display: grid;
+      grid-template-columns: 50% 50%;
+      grid-template-rows: 50% 50%;
+      width: 100%;
+      height: 100%;
+    }
+    .segment {
+      /* Every segment is relative to allow absolute positioning for icons */
+      position: relative;
+      transition: background-color 0.5s;
+      font-size: 4em;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    /* Icon styling for Programme 3 */
+    .icon {
+      position: absolute;
+      font-size: 5em;
+      pointer-events: none;
+    }
+    /* Default colors for each quadrant */
+    #topLeft { background-color: yellow; }
+    #topRight { background-color: blue; }
+    #bottomLeft { background-color: green; }
+    #bottomRight { background-color: red; }
+
+    /* Instruction overlay */
+    #overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: black;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 2em;
+      z-index: 2;
+    }
+    /* Programme indicator (top left) */
+    #progIndicator {
+      position: absolute;
+      top: 10px;
+      left: 10px;
+      font-size: 1.5em;
+      color: white;
+      z-index: 3;
+    }
+    /* Speed indicator (top right) */
+    #speedIndicator {
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      font-size: 1.5em;
+      color: white;
+      z-index: 3;
+    }
+  </style>
+</head>
+<body>
+  <!-- Overlay with Finnish instructions -->
+  <div id="overlay">
+    Paina Enter aloittaaksesi<br><br>
+    Ohjeet:<br>
+    - Paina Enter vaihtaaksesi ohjelmaa.<br>
+    - Nuoli Ylös: vähennä viivettä 500 ms.<br>
+    - Nuoli Alas: lisää viivettä 500 ms.<br>
+    - Nuoli Vasen: kaksinkertaista viive.<br>
+    - Nuoli Oikea: puolita viive.<br>
+    - Space: mittaa painallusten välinen aika, aseta uusi viive ja synkronoi värimuutokset.<br>
+    - ESC: pysäytä sovellus ja palauta viive oletusarvoon.
+  </div>
+
+  <!-- Programme indicator -->
+  <div id="progIndicator"></div>
+  <!-- Speed indicator -->
+  <div id="speedIndicator"></div>
+
+  <!-- Main container with segments -->
+  <div id="container">
+    <div class="segment" id="topLeft"></div>
+    <div class="segment" id="topRight"></div>
+    <div class="segment" id="bottomLeft"></div>
+    <div class="segment" id="bottomRight"></div>
+  </div>
+
+  <script>
+    // Global state variables
+    let running = false;
+    let currentTimeout = null;
+    // Programme modes: 1 = yksi väri, 2 = kaksi väriä, 3 = kaksi väriä kuvakkeilla.
+    let programmeMode = 1;
+    // Cycle delay (ms) after a 500 ms blackout.
+    let cycleDelay = 3000;
+    const initialCycleDelay = 3000;  // default cycle delay
+    const minCycleDelay = 500;
+
+    // For Space delay measurement:
+    let lastSpaceTime = null;
+
+    // Array for segments with default colors.
+    const segments = [
+      { id: 'topLeft', color: 'yellow' },
+      { id: 'topRight', color: 'blue' },
+      { id: 'bottomLeft', color: 'green' },
+      { id: 'bottomRight', color: 'red' }
+    ];
+
+    // Icons for programme 3
+    const handIcon = '✋';
+    const footIcon = '🦶';
+
+    // Utility functions
+    function getRandomInt(max) {
+      return Math.floor(Math.random() * max);
+    }
+
+    function getRandomElement(arr) {
+      return arr[getRandomInt(arr.length)];
+    }
+
+    // Clears any icons from all segments.
+    function clearIcons() {
+      segments.forEach(seg => {
+        const segElem = document.getElementById(seg.id);
+        const iconElem = segElem.querySelector('.icon');
+        if (iconElem) {
+          segElem.removeChild(iconElem);
+        }
+      });
+    }
+
+    // Clears all segments (sets to black) and removes icons.
+    function blackoutSegments() {
+      segments.forEach(seg => {
+        const segElem = document.getElementById(seg.id);
+        segElem.style.backgroundColor = 'black';
+      });
+      clearIcons();
+    }
+
+    // Updates the programme indicator text.
+    function updateProgIndicator() {
+      const progInd = document.getElementById('progIndicator');
+      let text = '';
+      if (programmeMode === 1) {
+        text = "Ohjelma 1: Yksi väri";
+      } else if (programmeMode === 2) {
+        text = "Ohjelma 2: Kaksi väriä";
+      } else if (programmeMode === 3) {
+        text = "Ohjelma 3: Kaksi väriä kuvakkeilla";
+      }
+      progInd.textContent = text;
+    }
+
+    // Updates the speed indicator.
+    function updateSpeedIndicator() {
+      const speedInd = document.getElementById('speedIndicator');
+      speedInd.textContent = `Viive: ${cycleDelay} ms`;
+    }
+
+    /* --- Cycle functions with blackout --- */
+    function cycleProgramme1() {
+      if (!running || programmeMode !== 1) return;
+      blackoutSegments();
+      currentTimeout = setTimeout(() => {
+        if (!running || programmeMode !== 1) return;
+        const seg = getRandomElement(segments);
+        document.getElementById(seg.id).style.backgroundColor = seg.color;
+        currentTimeout = setTimeout(cycleProgramme1, cycleDelay);
+      }, 500);
+    }
+
+    function cycleProgramme2() {
+      if (!running || programmeMode !== 2) return;
+      blackoutSegments();
+      currentTimeout = setTimeout(() => {
+        if (!running || programmeMode !== 2) return;
+        let firstIndex = getRandomInt(segments.length);
+        let secondIndex;
+        do {
+          secondIndex = getRandomInt(segments.length);
+        } while (secondIndex === firstIndex);
+        const seg1 = segments[firstIndex];
+        const seg2 = segments[secondIndex];
+        document.getElementById(seg1.id).style.backgroundColor = seg1.color;
+        document.getElementById(seg2.id).style.backgroundColor = seg2.color;
+        currentTimeout = setTimeout(cycleProgramme2, cycleDelay);
+      }, 500);
+    }
+
+    function cycleProgramme3() {
+      if (!running || programmeMode !== 3) return;
+      blackoutSegments();
+      currentTimeout = setTimeout(() => {
+        if (!running || programmeMode !== 3) return;
+        let firstIndex = getRandomInt(segments.length);
+        let secondIndex;
+        do {
+          secondIndex = getRandomInt(segments.length);
+        } while (secondIndex === firstIndex);
+        const seg1 = segments[firstIndex];
+        const seg2 = segments[secondIndex];
+        const segElem1 = document.getElementById(seg1.id);
+        const segElem2 = document.getElementById(seg2.id);
+        segElem1.style.backgroundColor = seg1.color;
+        segElem2.style.backgroundColor = seg2.color;
+        // Create icons
+        const icon1 = document.createElement('span');
+        const icon2 = document.createElement('span');
+        icon1.classList.add('icon');
+        icon2.classList.add('icon');
+        if (getRandomInt(2) === 0) {
+          icon1.textContent = footIcon;
+          icon2.textContent = footIcon;
+        } else {
+          if (getRandomInt(2) === 0) {
+            icon1.textContent = footIcon;
+            icon2.textContent = handIcon;
+          } else {
+            icon1.textContent = handIcon;
+            icon2.textContent = footIcon;
+          }
+        }
+        segElem1.appendChild(icon1);
+        segElem2.appendChild(icon2);
+        currentTimeout = setTimeout(cycleProgramme3, cycleDelay);
+      }, 500);
+    }
+
+    // This function immediately triggers a new cycle without the extra blackout delay.
+    function triggerCycle() {
+      // Clear any current visuals
+      blackoutSegments();
+      // Immediately display new colors
+      if (!running) return;
+      if (programmeMode === 1) {
+        const seg = getRandomElement(segments);
+        document.getElementById(seg.id).style.backgroundColor = seg.color;
+      } else if (programmeMode === 2) {
+        let firstIndex = getRandomInt(segments.length);
+        let secondIndex;
+        do {
+          secondIndex = getRandomInt(segments.length);
+        } while (secondIndex === firstIndex);
+        const seg1 = segments[firstIndex];
+        const seg2 = segments[secondIndex];
+        document.getElementById(seg1.id).style.backgroundColor = seg1.color;
+        document.getElementById(seg2.id).style.backgroundColor = seg2.color;
+      } else if (programmeMode === 3) {
+        let firstIndex = getRandomInt(segments.length);
+        let secondIndex;
+        do {
+          secondIndex = getRandomInt(segments.length);
+        } while (secondIndex === firstIndex);
+        const seg1 = segments[firstIndex];
+        const seg2 = segments[secondIndex];
+        const segElem1 = document.getElementById(seg1.id);
+        const segElem2 = document.getElementById(seg2.id);
+        segElem1.style.backgroundColor = seg1.color;
+        segElem2.style.backgroundColor = seg2.color;
+        const icon1 = document.createElement('span');
+        const icon2 = document.createElement('span');
+        icon1.classList.add('icon');
+        icon2.classList.add('icon');
+        if (getRandomInt(2) === 0) {
+          icon1.textContent = footIcon;
+          icon2.textContent = footIcon;
+        } else {
+          if (getRandomInt(2) === 0) {
+            icon1.textContent = footIcon;
+            icon2.textContent = handIcon;
+          } else {
+            icon1.textContent = handIcon;
+            icon2.textContent = footIcon;
+          }
+        }
+        segElem1.appendChild(icon1);
+        segElem2.appendChild(icon2);
+      }
+      // Schedule next cycle using the new delay.
+      currentTimeout = setTimeout(cycleColors, cycleDelay);
+    }
+
+    // The normal cycle (which includes a blackout) is started here.
+    function cycleColors() {
+      if (!running) return;
+      updateProgIndicator();
+      updateSpeedIndicator();
+      if (programmeMode === 1) {
+        cycleProgramme1();
+      } else if (programmeMode === 2) {
+        cycleProgramme2();
+      } else if (programmeMode === 3) {
+        cycleProgramme3();
+      }
+    }
+
+    /* --- Control functions --- */
+    function start() {
+      if (!running) {
+        running = true;
+        // Hide overlay.
+        document.getElementById('overlay').style.display = 'none';
+        cycleColors();
+      }
+    }
+
+    function stop() {
+      running = false;
+      if (currentTimeout) {
+        clearTimeout(currentTimeout);
+        currentTimeout = null;
+      }
+      blackoutSegments();
+      // Show overlay.
+      document.getElementById('overlay').style.display = 'flex';
+    }
+
+    function switchProgramme() {
+      if (!running) return;
+      if (currentTimeout) {
+        clearTimeout(currentTimeout);
+        currentTimeout = null;
+      }
+      clearIcons();
+      // Cycle modes: 1 -> 2 -> 3 -> 1
+      programmeMode = (programmeMode % 3) + 1;
+      updateProgIndicator();
+      cycleColors();
+    }
+
+    // When updating the cycle delay, clear the existing timeout and (if sync is true) trigger a cycle immediately.
+    function updateCycleDelay(newDelay, sync = false) {
+      cycleDelay = Math.max(minCycleDelay, newDelay);
+      updateSpeedIndicator();
+      if (running) {
+        if (currentTimeout) {
+          clearTimeout(currentTimeout);
+          currentTimeout = null;
+        }
+        if (sync) {
+          triggerCycle();
+        } else {
+          cycleColors();
+        }
+      }
+    }
+
+    // Adjust delay by a fixed step.
+    function adjustCycleDelay(change) {
+      updateCycleDelay(cycleDelay + change);
+    }
+
+    // Multiply the delay.
+    function multiplyCycleDelay(factor) {
+      updateCycleDelay(cycleDelay * factor);
+    }
+
+    /* --- Event Listener --- */
+    document.addEventListener('keydown', (e) => {
+      if (e.code === "Enter") {
+        if (!running) {
+          start();
+        } else {
+          switchProgramme();
+        }
+      }
+      else if (e.code === "ArrowUp") {
+        if (running) {
+          adjustCycleDelay(-500);
+        }
+      }
+      else if (e.code === "ArrowDown") {
+        if (running) {
+          adjustCycleDelay(500);
+        }
+      }
+      // ArrowLeft: doubles the delay.
+      else if (e.code === "ArrowLeft") {
+        if (running) {
+          multiplyCycleDelay(2);
+        }
+      }
+      // ArrowRight: halves the delay.
+      else if (e.code === "ArrowRight") {
+        if (running) {
+          multiplyCycleDelay(0.5);
+        }
+      }
+      // Space: measure the interval, update the delay, and sync the cycle.
+      else if (e.code === "Space") {
+        const now = Date.now();
+        if (lastSpaceTime !== null) {
+          const interval = now - lastSpaceTime;
+          updateCycleDelay(interval, true); // sync = true ensures triggerCycle() runs immediately.
+        }
+        lastSpaceTime = now;
+      }
+      else if (e.code === "Escape") {
+        if (running) {
+          updateCycleDelay(initialCycleDelay);
+          stop();
+        }
+      }
+    });
+
+    // Attempt fullscreen (optional).
+    document.documentElement.requestFullscreen?.().catch(() => {
+      // If fullscreen is blocked, that's okay.
+    });
+  </script>
+</body>
+</html>
